@@ -7,7 +7,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101A2B">
 <title>ТБО Мониторинг — г. Рудный</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 /* ============================================================
    ТБО МОНИТОРИНГ — design tokens
@@ -880,9 +879,77 @@ hr.sep{border:none;border-top:1px solid var(--line);margin:16px 0}
 
 <div id="toast"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ============================================================
+   Resilient CDN loader: some networks block specific CDN hosts
+   (e.g. cdnjs) while others (jsdelivr/unpkg) still work, or vice
+   versa. Each library is tried against a list of mirrors in
+   order; the first one that loads successfully wins. This runs
+   BEFORE the app's own <script> below, and the app's init() is
+   only called once everything resolves (see bottom of file).
+   ============================================================ */
+window.__libsReady = (function(){
+  function loadCSS(urls){
+    return new Promise(resolve=>{
+      let i=0;
+      function tryNext(){
+        if(i>=urls.length){ resolve(false); return; }
+        const link = document.createElement('link');
+        link.rel='stylesheet'; link.href=urls[i++];
+        link.onload=()=>resolve(true);
+        link.onerror=tryNext;
+        document.head.appendChild(link);
+      }
+      tryNext();
+    });
+  }
+  function loadJS(urls){
+    return new Promise(resolve=>{
+      let i=0;
+      function tryNext(){
+        if(i>=urls.length){ resolve(false); return; }
+        const s = document.createElement('script');
+        s.src=urls[i++];
+        s.onload=()=>resolve(true);
+        s.onerror=tryNext;
+        document.head.appendChild(s);
+      }
+      tryNext();
+    });
+  }
+  const leafletCSS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
+    'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.min.css'
+  ];
+  const leafletJS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+    'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js',
+    'https://unpkg.com/leaflet@1.9.4/dist/leaflet.min.js'
+  ];
+  const chartJS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+    'https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js'
+  ];
+  const xlsxJS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+  ];
+  return Promise.all([
+    loadCSS(leafletCSS),
+    loadJS(leafletJS),
+    loadJS(chartJS),
+    loadJS(xlsxJS)
+  ]).then(results=>{
+    if(!results[1]) console.error('Leaflet (карта) не удалось загрузить ни с одного источника — проверьте интернет/блокировки.');
+    if(!results[2]) console.error('Chart.js не удалось загрузить ни с одного источника.');
+    if(!results[3]) console.error('xlsx не удалось загрузить ни с одного источника.');
+    return results;
+  });
+})();
+</script>
 <script>
 /* ============================================================
    ТБО МОНИТОРИНГ — application logic
@@ -896,6 +963,7 @@ hr.sep{border:none;border-top:1px solid var(--line);margin:16px 0}
    ============================================================ */
 (function(){
 "use strict";
+
 
 /* ---------------- storage keys ---------------- */
 const K = {
@@ -1318,6 +1386,7 @@ function renderWeekChart(){
   });
   const labels = days.map(d=>new Date(d+'T00:00:00').toLocaleDateString('ru-RU',{weekday:'short',day:'2-digit'}));
   const ctx = document.getElementById('chart-week');
+  if(typeof Chart==='undefined') return;
   if(S.charts.week) S.charts.week.destroy();
   S.charts.week = new Chart(ctx, {
     type:'bar',
@@ -1331,6 +1400,7 @@ function renderStatusPie(todayOrders){
   const counts = {pending:0, in_progress:0, completed:0, cancelled:0};
   todayOrders.forEach(o=>{ counts[computeOrderStatus(o)]++; });
   const ctx = document.getElementById('chart-status');
+  if(typeof Chart==='undefined') return;
   if(S.charts.status) S.charts.status.destroy();
   S.charts.status = new Chart(ctx, {
     type:'doughnut',
@@ -1342,8 +1412,20 @@ function renderStatusPie(todayOrders){
 }
 
 /* ================= КАРТА (admin) ================= */
+/* ================= КАРТА (общие helpers) ================= */
+function mapLibUnavailable(containerId){
+  const el = document.getElementById(containerId);
+  if(el && !el.dataset.mapErrShown){
+    el.dataset.mapErrShown='1';
+    el.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--ink-soft);font-size:13px;line-height:1.5">'
+      + 'Карта не загрузилась: библиотека Leaflet не смогла загрузиться ни с одного источника.<br>'
+      + 'Проверьте интернет-соединение или отключите блокировщик рекламы/VPN-фильтр для этого сайта, затем обновите страницу.'
+      + '</div>';
+  }
+}
 function ensureAdminMap(){
   if(S.maps.admin) return S.maps.admin;
+  if(typeof L==='undefined'){ mapLibUnavailable('admin-map'); return null; }
   const map = L.map('admin-map', {zoomControl:true}).setView([CITY_CENTER.lat, CITY_CENTER.lng], 13);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:20
@@ -1383,6 +1465,7 @@ function truckIcon(){
 
 function renderAdminMap(){
   const map = ensureAdminMap();
+  if(!map) return;
   Object.values(S.layers.adminSites).forEach(m=>map.removeLayer(m));
   S.layers.adminSites = {};
   S.sites.forEach(site=>{
@@ -1421,6 +1504,7 @@ function focusVehicle(vehicleId){
   const pos = S.positions[v.driverId];
   if(!pos) { toast('Нет данных GPS по этой машине','danger'); return; }
   const map = ensureAdminMap();
+  if(!map) return;
   map.setView([pos.lat, pos.lng], 16);
   if(S.layers.adminVehicles[vehicleId]) S.layers.adminVehicles[vehicleId].openPopup();
 }
@@ -1770,6 +1854,7 @@ function fillManageFormValues(type, id){
 
 function initSiteFormMap(id){
   if(S.maps.siteForm){ S.maps.siteForm.remove(); S.maps.siteForm=null; }
+  if(typeof L==='undefined'){ mapLibUnavailable('mf-site-map'); return; }
   const lat = parseFloat(document.getElementById('mf-lat').value)||CITY_CENTER.lat;
   const lng = parseFloat(document.getElementById('mf-lng').value)||CITY_CENTER.lng;
   const map = L.map('mf-site-map').setView([lat,lng], 14);
@@ -1987,6 +2072,7 @@ function exportCSV(){
 
 function exportExcel(){
   if(!lastReport){ toast('Сначала сформируйте отчёт','danger'); return; }
+  if(typeof XLSX==='undefined'){ toast('Библиотека Excel не загрузилась — проверьте интернет','danger'); return; }
   const kpiData = lastReport.kpiRows.map(r=>({
     'Водитель':driverName(r.driverId), 'ТС':vehiclePlate(r.vehicleId), 'Наряды':r.ordersCount,
     'Выполнено':r.done, 'Всего площадок':r.total, 'Пропущено':r.skipped,
@@ -2253,6 +2339,7 @@ function startGeoWatch(){
 /* ================= КАРТА (водитель) ================= */
 function ensureDriverMap(){
   if(S.maps.driver) return S.maps.driver;
+  if(typeof L==='undefined'){ mapLibUnavailable('driver-route-map'); return null; }
   const map = L.map('driver-route-map').setView([CITY_CENTER.lat, CITY_CENTER.lng], 13);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:20}).addTo(map);
   S.maps.driver = map;
@@ -2260,6 +2347,7 @@ function ensureDriverMap(){
 }
 function renderDriverMap(){
   const map = ensureDriverMap();
+  if(!map) return;
   Object.values(S.layers.driverSites).forEach(m=>map.removeLayer(m)); S.layers.driverSites={};
   const o = S.activeOrderId ? findOrder(S.activeOrderId) : null;
   const bounds = [];
@@ -2339,6 +2427,7 @@ function wireEvents(){
 
 /* ================= BOOTSTRAP ================= */
 async function init(){
+  try{ await window.__libsReady; }catch(e){ console.error('lib load failed', e); }
   wireEvents();
   try{ await seedIfNeeded(); }catch(e){ console.error('seed failed', e); }
   showScreen('screen-login');
