@@ -1345,7 +1345,7 @@ function renderStatusPie(todayOrders){
 function ensureAdminMap(){
   if(S.maps.admin) return S.maps.admin;
   const map = L.map('admin-map', {zoomControl:true}).setView([CITY_CENTER.lat, CITY_CENTER.lng], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution:'&copy; OpenStreetMap', maxZoom:19
   }).addTo(map);
   S.maps.admin = map;
@@ -1773,7 +1773,7 @@ function initSiteFormMap(id){
   const lat = parseFloat(document.getElementById('mf-lat').value)||CITY_CENTER.lat;
   const lng = parseFloat(document.getElementById('mf-lng').value)||CITY_CENTER.lng;
   const map = L.map('mf-site-map').setView([lat,lng], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OpenStreetMap'}).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OpenStreetMap'}).addTo(map);
   const marker = L.marker([lat,lng], {draggable:true}).addTo(map);
   function syncInputs(ll){
     document.getElementById('mf-lat').value = ll.lat.toFixed(6);
@@ -2254,7 +2254,7 @@ function startGeoWatch(){
 function ensureDriverMap(){
   if(S.maps.driver) return S.maps.driver;
   const map = L.map('driver-route-map').setView([CITY_CENTER.lat, CITY_CENTER.lng], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OpenStreetMap'}).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OpenStreetMap'}).addTo(map);
   S.maps.driver = map;
   return map;
 }
